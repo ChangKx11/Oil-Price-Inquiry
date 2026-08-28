@@ -1,7 +1,7 @@
 /*
- * 油价查询脚本 - 基于 m.qiyoujiage.com
- * 功能：查询指定省份实时油价 + 下一轮调价预估
- * 参数：province（中文省份名）, oilType（92/95/98/0h）
+ * 油价查询脚本 - 增强版爬虫（模拟浏览器）
+ * 数据源：m.qiyoujiage.com
+ * 支持省份、油品参数，默认福建 95号
  */
 
 const provinceMap = {
@@ -35,16 +35,60 @@ try {
 
 const provincePinyin = provinceMap[provinceName] || provinceName;
 const oilLabel = oilTypeMap[oilType] || oilType;
-const url = `http://m.qiyoujiage.com/${provincePinyin}.shtml`;
-console.log(`[油价查询] 查询 ${provinceName} ${oilLabel}，URL: ${url}`);
+
+// 尝试 HTTPS，如果失败则回退到 HTTP
+const urls = [
+    `https://m.qiyoujiage.com/${provincePinyin}.shtml`,
+    `http://m.qiyoujiage.com/${provincePinyin}.shtml`
+];
+
+console.log(`[油价查询] 查询 ${provinceName} ${oilLabel}，尝试URL: ${urls[0]}`);
 
 function main() {
-    $httpClient.get({ url, timeout:15 }, (error, response, data) => {
+    // 完整的浏览器请求头
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Upgrade-Insecure-Requests': '1'
+    };
+
+    // 尝试请求（先 HTTPS，失败后回退 HTTP）
+    tryRequest(urls[0], headers, 0);
+}
+
+function tryRequest(url, headers, attempt) {
+    console.log(`[油价查询] 尝试 ${attempt + 1}/${urls.length}: ${url}`);
+
+    $httpClient.get({
+        url: url,
+        timeout: 10,
+        headers: headers
+    }, (error, response, data) => {
         if (error) {
-            $notification.post('⛽ 油价查询失败', provinceName, `网络请求失败\n${error}`);
+            console.log(`[油价查询] 请求失败: ${error}`);
+            // 如果还有备选 URL，继续尝试
+            if (attempt + 1 < urls.length) {
+                tryRequest(urls[attempt + 1], headers, attempt + 1);
+            } else {
+                $notification.post('⛽ 油价查询失败', provinceName, `所有URL均请求超时\n${error}`);
+                $done();
+            }
+            return;
+        }
+
+        console.log(`[油价查询] 响应状态码: ${response ? response.statusCode : '无响应'}`);
+
+        if (response && response.statusCode !== 200) {
+            $notification.post('⛽ 油价查询失败', provinceName, `HTTP状态码: ${response.statusCode}`);
             $done();
             return;
         }
+
         try {
             const priceInfo = parseOilPrice(data, oilType);
             const prediction = parsePrediction(data);
@@ -54,16 +98,20 @@ function main() {
                 if (priceInfo.change) body += ` ${formatChange(priceInfo.change)}`;
                 if (prediction && prediction.rawText) body += `\n---\n📅 ${prediction.rawText}`;
                 $notification.post(title, '📊 实时油价及预测', body);
+                console.log(`[油价查询] 通知发送成功`);
             } else {
                 $notification.post('⛽ 查询失败', provinceName, `未找到 ${oilLabel} 价格`);
+                console.log(`[油价查询] 页面预览: ${data.substring(0, 300)}`);
             }
         } catch(e) {
             $notification.post('⛽ 异常', provinceName, `解析失败\n${e.message}`);
+            console.log(`[油价查询] 异常: ${e.stack}`);
         }
         $done();
     });
 }
 
+// ============ 解析函数（保持不变） ============
 function parseOilPrice(html, targetType) {
     const keyword = oilTypeMap[targetType] || targetType;
     let price = null;
