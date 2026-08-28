@@ -1,8 +1,15 @@
 /*
- * 油价查询脚本 - 默认查询福建 95号汽油
- * 支持参数：字符串 "福建,95" 或对象 {province:'福建', oilType:'95'} 或数组
- * 增强异常处理，避免 [object Object] 问题
+ * 油价查询脚本 - 强制默认福建 95号
+ * 忽略所有外部参数，完全使用脚本内默认值（用于解决 [object Object] 问题）
  */
+
+// ============ 硬编码默认值 ============
+const DEFAULT_PROVINCE = '福建';
+const DEFAULT_OIL = '95';
+
+// 打印当前使用的参数（忽略 $argument）
+console.log(`[油价查询] 使用硬编码默认值：省份=${DEFAULT_PROVINCE}, 油品=${DEFAULT_OIL}`);
+console.log(`[油价查询] $argument 原始内容: ${JSON.stringify($argument)}`);
 
 // ============ 省份拼音映射 ============
 const provinceMap = {
@@ -20,58 +27,9 @@ const oilTypeMap = {
     '92':'92号汽油','95':'95号汽油','98':'98号汽油','0h':'0号柴油'
 };
 
-// ============ 智能参数解析（带详细日志） ============
-function parseArguments(arg) {
-    let province = '福建';   // 默认
-    let oil = '95';         // 默认
-
-    console.log(`[油价查询] 原始参数类型: ${typeof arg}, 内容: ${JSON.stringify(arg)}`);
-
-    try {
-        if (typeof arg === 'string') {
-            const str = arg.trim();
-            if (str === '' || str === '[object Object]' || str.includes('[object Object]')) {
-                console.log('[油价查询] 参数为异常字符串，使用默认值');
-            } else {
-                const parts = str.split(',').map(s => s.trim());
-                if (parts[0] && !parts[0].includes('[object') && !parts[0].includes('Object')) {
-                    province = parts[0];
-                } else {
-                    console.log(`[油价查询] 省份部分无效: "${parts[0]}"，使用默认`);
-                }
-                if (parts[1] && !parts[1].includes('[object')) {
-                    oil = parts[1];
-                } else {
-                    console.log(`[油价查询] 油品部分无效: "${parts[1]}"，使用默认`);
-                }
-            }
-        } else if (typeof arg === 'object' && arg !== null) {
-            // 尝试从对象属性提取
-            const pVal = arg.province || arg[0] || arg.prov;
-            if (pVal && typeof pVal === 'string' && !pVal.includes('[object')) {
-                province = pVal;
-            }
-            const oVal = arg.oilType || arg[1] || arg.oil || arg.type;
-            if (oVal && typeof oVal === 'string' && !oVal.includes('[object')) {
-                oil = oVal;
-            }
-            // 如果还是没有提取到，则使用默认值（已在外部定义）
-        } else {
-            // 其他类型（数字等），使用默认值
-            console.log(`[油价查询] 不支持的参数类型，使用默认值`);
-        }
-    } catch (e) {
-        console.log(`[油价查询] 参数解析异常: ${e.message}，使用默认值`);
-    }
-
-    console.log(`[油价查询] 最终解析结果：省份=${province}, 油品=${oil}`);
-    return { province, oil };
-}
-
-const params = parseArguments($argument);
-let provinceName = params.province;
-let oilType = params.oil;
-
+// 直接使用硬编码值
+const provinceName = DEFAULT_PROVINCE;
+const oilType = DEFAULT_OIL;
 const provincePinyin = provinceMap[provinceName] || provinceName;
 const oilLabel = oilTypeMap[oilType] || oilType;
 const url = `http://m.qiyoujiage.com/${provincePinyin}.shtml`;
