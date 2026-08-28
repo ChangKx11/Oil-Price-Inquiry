@@ -47,10 +47,12 @@ const oilTypeMap = {
     '0h': '0号柴油'
 };
 
-// ============ 获取用户参数 ============
-const args = $argument ? $argument.split(',') : [];
+// ============ 安全获取用户参数 ============
+const argStr = typeof $argument === 'string' ? $argument : String($argument || '');
+const args = argStr ? argStr.split(',') : [];
 const provinceName = (args[0] || '广东').trim();
 const oilType = (args[1] || '92').trim();
+
 const provincePinyin = provinceMap[provinceName] || provinceName;
 const oilLabel = oilTypeMap[oilType] || oilType;
 const url = `http://m.qiyoujiage.com/${provincePinyin}.shtml`;
@@ -103,7 +105,6 @@ function main() {
 function parseOilPrice(html, targetType) {
     const keyword = oilTypeMap[targetType] || targetType;
 
-    // 匹配价格数字（如 7.28 元/升）
     const pricePatterns = [
         new RegExp(`${keyword}[\\s\\S]*?(\\d+\\.\\d{2})\\s*元/升`, 'i'),
         new RegExp(`${keyword}[\\s\\S]*?(\\d+\\.?\\d*)\\s*元`, 'i'),
@@ -119,7 +120,6 @@ function parseOilPrice(html, targetType) {
         }
     }
 
-    // 如果正则匹配失败，尝试按位置匹配（页面中油价按 92、95、98、0号柴油 顺序排列）
     if (!price) {
         const allPrices = html.match(/(\d+\.\d{2})\s*元\/?升?/g);
         if (allPrices && allPrices.length > 0) {
@@ -134,7 +134,6 @@ function parseOilPrice(html, targetType) {
 
     if (!price) return null;
 
-    // 提取涨跌信息（如 ↑0.28）
     let change = null;
     const changeMatch = html.match(new RegExp(`${keyword}[\\s\\S]*?([↑↓↗↘])\\s*(\\d+\\.?\\d*)`, 'i'));
     if (changeMatch) {
@@ -160,24 +159,20 @@ function parsePrediction(html) {
     };
 
     try {
-        // 1. 匹配调价日期：如 "下次油价8月28日24时调整"
         const dateMatch = html.match(/下次油价(\d+月\d+日)24时调整/);
         if (dateMatch) result.date = dateMatch[1];
 
-        // 2. 匹配调价方向与吨价：如 "预计上调320元/吨" 或 "预计搁浅"
         const adjustMatch = html.match(/预计(上调|下调|搁浅)(\d+)?元\/吨/);
         if (adjustMatch) {
             result.direction = adjustMatch[1];
             if (adjustMatch[2]) result.amountPerTon = adjustMatch[2];
         }
 
-        // 3. 匹配升价区间：如 "(0.24元/升-0.29元/升)"
         const rangeMatch = html.match(/\((\d+\.\d+)元\/升-(\d+\.\d+)元\/升\)/);
         if (rangeMatch) {
             result.amountPerLiterMin = rangeMatch[1];
             result.amountPerLiterMax = rangeMatch[2];
         } else {
-            // 尝试匹配单个升价：如 "(0.24元/升)"
             const singleMatch = html.match(/预计(?:上调|下调)\d+元\/吨[^\(]*\((\d+\.\d+)元\/升\)/);
             if (singleMatch) {
                 result.amountPerLiterMin = singleMatch[1];
@@ -185,7 +180,6 @@ function parsePrediction(html) {
             }
         }
 
-        // 4. 生成可读的摘要文本
         if (result.date || result.direction) {
             let parts = [];
             if (result.date) parts.push(`下次调价 ${result.date}`);
