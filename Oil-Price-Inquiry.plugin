@@ -6,7 +6,7 @@
 #!loon_version = 3.2.1
 
 [Argument]
-province = input,"广东",tag=省份,desc=省份中文名（如广东、北京、山东等）
+province = input,"福建",tag=省份,desc=省份中文名（如广东、北京、山东等）
 cron = input,"0 8 * * *",tag=定时时间,desc=Cron表达式（默认每天8点）
 oilType = select,"92","95","98","0h",tag=油品类型,desc=92/95/98号汽油或0号柴油
 
