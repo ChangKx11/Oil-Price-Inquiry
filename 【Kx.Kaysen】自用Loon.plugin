@@ -1,6 +1,6 @@
-#!name = 油价查询（含调价预测）
-#!desc = 查询指定省份实时油价 + 下一轮调价预估，设备通知推送
-#!author = YourName
+#!name = 【Kx.Kaysen】自用Loon油价查询（含调价预测）
+#!desc = 查询指定省份实时油价 + 下一轮调价预估，推送通知到设备
+#!author = Kx.Kaysen
 #!icon = https://raw.githubusercontent.com/Loon0x00/LoonExampleConfig/master/Plugin/icon.png
 #!system = ios,tvos,macos
 #!loon_version = 3.2.1
@@ -12,4 +12,4 @@ oilType = select,"92","95","98","0h",tag=油品类型,desc=92/95/98号汽油或0
 
 [Script]
 # 注意：请将下面的链接替换为你自己GitHub上的 oil_price.js Raw 地址
-cron {cron} script-path=https://raw.githubusercontent.com/ChangKx11/Oil-Price-Inquiry/main/oil_price.js, tag=油价查询, argument=[{province},{oilType}], enable=true
+cron {cron} script-path=https://raw.githubusercontent.com/ChangKx11/Oil-Price-Inquiry/blob/main/oil_price.js, tag=油价查询, argument=[{province},{oilType}], enable=true
