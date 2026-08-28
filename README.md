@@ -1,2 +1,2 @@
 # Oil-Price-Inquiry
-自由油价查询脚本
+自用油价查询脚本
