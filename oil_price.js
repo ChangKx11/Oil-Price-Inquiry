@@ -20,8 +20,8 @@ const oilTypeMap = {
 };
 
 // ===== 安全解析参数 =====
-let provinceName = '广东';
-let oilType = '92';
+let provinceName = '福建';
+let oilType = '95';
 try {
     const argStr = typeof $argument === 'string' ? $argument : String($argument || '');
     if (argStr) {
