@@ -1,12 +1,13 @@
 /*
  * 油价查询脚本 - 默认查询福建 95号汽油
- * 参数：支持字符串 "福建,95" 或对象 {province:'福建', oilType:'95'} 或数组 ['福建','95']
+ * 支持参数：字符串 "福建,95" 或对象 {province:'福建', oilType:'95'} 或数组
+ * 增强异常处理，避免 [object Object] 问题
  */
 
 // ============ 省份拼音映射 ============
 const provinceMap = {
     '北京':'beijing','上海':'shanghai','广东':'guangdong','深圳':'shenzhen',
-    '山东':'shandong','江苏':'jiangsu','浙江':'zhejiang','福建':'fujian',   // 已包含
+    '山东':'shandong','江苏':'jiangsu','浙江':'zhejiang','福建':'fujian',
     '河南':'henan','湖北':'hubei','湖南':'hunan','四川':'sichuan',
     '重庆':'chongqing','辽宁':'liaoning','吉林':'jilin','黑龙江':'heilongjiang',
     '河北':'hebei','山西':'shanxi','陕西':'shaanxi','甘肃':'gansu',
@@ -19,36 +20,57 @@ const oilTypeMap = {
     '92':'92号汽油','95':'95号汽油','98':'98号汽油','0h':'0号柴油'
 };
 
-// ============ 智能参数解析（默认值改为福建和95） ============
+// ============ 智能参数解析（带详细日志） ============
 function parseArguments(arg) {
-    let province = '福建';   // <--- 默认改为福建
-    let oil = '95';         // <--- 默认改为95号
+    let province = '福建';   // 默认
+    let oil = '95';         // 默认
+
+    console.log(`[油价查询] 原始参数类型: ${typeof arg}, 内容: ${JSON.stringify(arg)}`);
 
     try {
-        if (typeof arg === 'string' && arg.trim() !== '') {
-            const parts = arg.split(',').map(s => s.trim());
-            if (parts[0]) province = parts[0];
-            if (parts[1]) oil = parts[1];
+        if (typeof arg === 'string') {
+            const str = arg.trim();
+            if (str === '' || str === '[object Object]' || str.includes('[object Object]')) {
+                console.log('[油价查询] 参数为异常字符串，使用默认值');
+            } else {
+                const parts = str.split(',').map(s => s.trim());
+                if (parts[0] && !parts[0].includes('[object') && !parts[0].includes('Object')) {
+                    province = parts[0];
+                } else {
+                    console.log(`[油价查询] 省份部分无效: "${parts[0]}"，使用默认`);
+                }
+                if (parts[1] && !parts[1].includes('[object')) {
+                    oil = parts[1];
+                } else {
+                    console.log(`[油价查询] 油品部分无效: "${parts[1]}"，使用默认`);
+                }
+            }
         } else if (typeof arg === 'object' && arg !== null) {
-            if (arg.province) province = arg.province;
-            else if (arg[0]) province = arg[0];
-            
-            if (arg.oilType) oil = arg.oilType;
-            else if (arg[1]) oil = arg[1];
-            else if (arg.oil) oil = arg.oil;
+            // 尝试从对象属性提取
+            const pVal = arg.province || arg[0] || arg.prov;
+            if (pVal && typeof pVal === 'string' && !pVal.includes('[object')) {
+                province = pVal;
+            }
+            const oVal = arg.oilType || arg[1] || arg.oil || arg.type;
+            if (oVal && typeof oVal === 'string' && !oVal.includes('[object')) {
+                oil = oVal;
+            }
+            // 如果还是没有提取到，则使用默认值（已在外部定义）
+        } else {
+            // 其他类型（数字等），使用默认值
+            console.log(`[油价查询] 不支持的参数类型，使用默认值`);
         }
     } catch (e) {
-        console.log('[油价查询] 参数解析异常，使用默认值（福建,95）');
+        console.log(`[油价查询] 参数解析异常: ${e.message}，使用默认值`);
     }
 
+    console.log(`[油价查询] 最终解析结果：省份=${province}, 油品=${oil}`);
     return { province, oil };
 }
 
 const params = parseArguments($argument);
 let provinceName = params.province;
 let oilType = params.oil;
-
-console.log(`[油价查询] 解析参数：省份=${provinceName}, 油品=${oilType}`);
 
 const provincePinyin = provinceMap[provinceName] || provinceName;
 const oilLabel = oilTypeMap[oilType] || oilType;
