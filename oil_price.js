@@ -1,9 +1,10 @@
 /*
- * 油价查询脚本 - 增强版爬虫（模拟浏览器）
+ * 油价查询脚本 - 增强版（支持对象参数，过滤无效值）
+ * 默认：福建 95号
  * 数据源：m.qiyoujiage.com
- * 支持省份、油品参数，默认福建 95号
  */
 
+// ============ 映射表 ============
 const provinceMap = {
     '北京':'beijing','上海':'shanghai','广东':'guangdong','深圳':'shenzhen',
     '山东':'shandong','江苏':'jiangsu','浙江':'zhejiang','福建':'fujian',
@@ -19,51 +20,89 @@ const oilTypeMap = {
     '92':'92号汽油','95':'95号汽油','98':'98号汽油','0h':'0号柴油'
 };
 
-// ===== 安全解析参数 =====
-let provinceName = '福建';
-let oilType = '95';
-try {
-    const argStr = typeof $argument === 'string' ? $argument : String($argument || '');
-    if (argStr) {
-        const parts = argStr.split(',').map(s => s.trim());
-        if (parts[0]) provinceName = parts[0];
-        if (parts[1]) oilType = parts[1];
+// ============ 超级健壮的参数解析 ============
+function parseArguments(arg) {
+    // 默认值
+    let province = '福建';
+    let oil = '95';
+
+    try {
+        if (typeof arg === 'string') {
+            // 字符串：按逗号分割
+            const parts = arg.split(',').map(s => s.trim());
+            if (parts[0] && !parts[0].toLowerCase().includes('object')) {
+                // 检查是否在映射表中（或用户输入的是中文名，只要不包含'object'就认为有效）
+                if (provinceMap[parts[0]] || parts[0].length > 1) {
+                    province = parts[0];
+                }
+            }
+            if (parts[1] && !parts[1].toLowerCase().includes('object')) {
+                if (oilTypeMap[parts[1]] || parts[1].length > 1) {
+                    oil = parts[1];
+                }
+            }
+        } else if (typeof arg === 'object' && arg !== null) {
+            // 对象：提取 province / oilType
+            let p = arg.province || arg[0] || arg.prov;
+            if (p && typeof p === 'string' && !p.toLowerCase().includes('object')) {
+                if (provinceMap[p] || p.length > 1) {
+                    province = p;
+                }
+            }
+            let o = arg.oilType || arg[1] || arg.oil || arg.type;
+            if (o && typeof o === 'string' && !o.toLowerCase().includes('object')) {
+                if (oilTypeMap[o] || o.length > 1) {
+                    oil = o;
+                }
+            }
+        }
+    } catch (e) {
+        console.log('[油价查询] 参数解析异常，使用默认值');
     }
-} catch(e) {
-    console.log('[油价查询] 参数解析失败，使用默认值');
+
+    // 最终校验：如果解析出的省份不在映射表中，但用户可能输入了中文名，我们保留，因为后续会用到 provinceMap[province] || province
+    // 但如果 province 仍然是 '[object Object]'，则强制回退
+    if (province.toLowerCase().includes('object')) {
+        province = '福建';
+    }
+    if (oil.toLowerCase().includes('object')) {
+        oil = '95';
+    }
+
+    return { province, oil };
 }
 
+const params = parseArguments($argument);
+let provinceName = params.province;
+let oilType = params.oil;
+
+console.log(`[油价查询] 最终参数：省份=${provinceName}, 油品=${oilType}`);
+
+// ============ 构建 URL ============
 const provincePinyin = provinceMap[provinceName] || provinceName;
 const oilLabel = oilTypeMap[oilType] || oilType;
-
-// 尝试 HTTPS，如果失败则回退到 HTTP
 const urls = [
     `https://m.qiyoujiage.com/${provincePinyin}.shtml`,
     `http://m.qiyoujiage.com/${provincePinyin}.shtml`
 ];
+console.log(`[油价查询] 尝试URL: ${urls[0]}`);
 
-console.log(`[油价查询] 查询 ${provinceName} ${oilLabel}，尝试URL: ${urls[0]}`);
-
+// ============ 请求函数（带重试） ============
 function main() {
-    // 完整的浏览器请求头
     const headers = {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
         'Upgrade-Insecure-Requests': '1'
     };
 
-    // 尝试请求（先 HTTPS，失败后回退 HTTP）
     tryRequest(urls[0], headers, 0);
 }
 
 function tryRequest(url, headers, attempt) {
-    console.log(`[油价查询] 尝试 ${attempt + 1}/${urls.length}: ${url}`);
-
+    console.log(`[油价查询] 尝试 ${attempt+1}/${urls.length}: ${url}`);
     $httpClient.get({
         url: url,
         timeout: 10,
@@ -71,7 +110,6 @@ function tryRequest(url, headers, attempt) {
     }, (error, response, data) => {
         if (error) {
             console.log(`[油价查询] 请求失败: ${error}`);
-            // 如果还有备选 URL，继续尝试
             if (attempt + 1 < urls.length) {
                 tryRequest(urls[attempt + 1], headers, attempt + 1);
             } else {
@@ -82,7 +120,6 @@ function tryRequest(url, headers, attempt) {
         }
 
         console.log(`[油价查询] 响应状态码: ${response ? response.statusCode : '无响应'}`);
-
         if (response && response.statusCode !== 200) {
             $notification.post('⛽ 油价查询失败', provinceName, `HTTP状态码: ${response.statusCode}`);
             $done();
@@ -111,7 +148,7 @@ function tryRequest(url, headers, attempt) {
     });
 }
 
-// ============ 解析函数（保持不变） ============
+// ============ 解析函数（与之前相同） ============
 function parseOilPrice(html, targetType) {
     const keyword = oilTypeMap[targetType] || targetType;
     let price = null;
