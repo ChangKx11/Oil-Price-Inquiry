@@ -1,12 +1,12 @@
 /*
- * 油价查询脚本 - 基于 m.qiyoujiage.com
- * 功能：查询指定省份实时油价 + 下一轮调价预估
- * 参数：province（中文省份名）, oilType（92/95/98/0h）
+ * 油价查询脚本 - 默认查询福建 95号汽油
+ * 参数：支持字符串 "福建,95" 或对象 {province:'福建', oilType:'95'} 或数组 ['福建','95']
  */
 
+// ============ 省份拼音映射 ============
 const provinceMap = {
     '北京':'beijing','上海':'shanghai','广东':'guangdong','深圳':'shenzhen',
-    '山东':'shandong','江苏':'jiangsu','浙江':'zhejiang','福建':'fujian',
+    '山东':'shandong','江苏':'jiangsu','浙江':'zhejiang','福建':'fujian',   // 已包含
     '河南':'henan','湖北':'hubei','湖南':'hunan','四川':'sichuan',
     '重庆':'chongqing','辽宁':'liaoning','吉林':'jilin','黑龙江':'heilongjiang',
     '河北':'hebei','山西':'shanxi','陕西':'shaanxi','甘肃':'gansu',
@@ -19,57 +19,80 @@ const oilTypeMap = {
     '92':'92号汽油','95':'95号汽油','98':'98号汽油','0h':'0号柴油'
 };
 
-// ===== 安全解析参数 =====
-let provinceName = '福建';
-let oilType = '95';
-try {
-    const argStr = typeof $argument === 'string' ? $argument : String($argument || '');
-    if (argStr) {
-        const parts = argStr.split(',').map(s => s.trim());
-        if (parts[0]) provinceName = parts[0];
-        if (parts[1]) oilType = parts[1];
+// ============ 智能参数解析（默认值改为福建和95） ============
+function parseArguments(arg) {
+    let province = '福建';   // <--- 默认改为福建
+    let oil = '95';         // <--- 默认改为95号
+
+    try {
+        if (typeof arg === 'string' && arg.trim() !== '') {
+            const parts = arg.split(',').map(s => s.trim());
+            if (parts[0]) province = parts[0];
+            if (parts[1]) oil = parts[1];
+        } else if (typeof arg === 'object' && arg !== null) {
+            if (arg.province) province = arg.province;
+            else if (arg[0]) province = arg[0];
+            
+            if (arg.oilType) oil = arg.oilType;
+            else if (arg[1]) oil = arg[1];
+            else if (arg.oil) oil = arg.oil;
+        }
+    } catch (e) {
+        console.log('[油价查询] 参数解析异常，使用默认值（福建,95）');
     }
-} catch(e) {
-    console.log('[油价查询] 参数解析失败，使用默认值');
+
+    return { province, oil };
 }
+
+const params = parseArguments($argument);
+let provinceName = params.province;
+let oilType = params.oil;
+
+console.log(`[油价查询] 解析参数：省份=${provinceName}, 油品=${oilType}`);
 
 const provincePinyin = provinceMap[provinceName] || provinceName;
 const oilLabel = oilTypeMap[oilType] || oilType;
 const url = `http://m.qiyoujiage.com/${provincePinyin}.shtml`;
-console.log(`[油价查询] 查询 ${provinceName} ${oilLabel}，URL: ${url}`);
 
+console.log(`[油价查询] 请求URL: ${url}`);
+
+// ============ 主函数 ============
 function main() {
-    $httpClient.get({ url, timeout:15 }, (error, response, data) => {
+    $httpClient.get({ url, timeout: 15 }, (error, response, data) => {
         if (error) {
             $notification.post('⛽ 油价查询失败', provinceName, `网络请求失败\n${error}`);
             $done();
             return;
         }
+
         try {
             const priceInfo = parseOilPrice(data, oilType);
             const prediction = parsePrediction(data);
+
             if (priceInfo) {
                 let title = `⛽ ${provinceName} ${oilLabel}`;
                 let body = `当前价格：${priceInfo.price} 元/升`;
                 if (priceInfo.change) body += ` ${formatChange(priceInfo.change)}`;
                 if (prediction && prediction.rawText) body += `\n---\n📅 ${prediction.rawText}`;
                 $notification.post(title, '📊 实时油价及预测', body);
+                console.log(`[油价查询] 通知发送成功`);
             } else {
                 $notification.post('⛽ 查询失败', provinceName, `未找到 ${oilLabel} 价格`);
             }
-        } catch(e) {
+        } catch (e) {
             $notification.post('⛽ 异常', provinceName, `解析失败\n${e.message}`);
         }
         $done();
     });
 }
 
+// ============ 解析当前油价 ============
 function parseOilPrice(html, targetType) {
     const keyword = oilTypeMap[targetType] || targetType;
     let price = null;
     const patterns = [
-        new RegExp(`${keyword}[\\s\\S]*?(\\d+\\.\\d{2})\\s*元/升`,'i'),
-        new RegExp(`${keyword}[\\s\\S]*?(\\d+\\.?\\d*)\\s*元`,'i')
+        new RegExp(`${keyword}[\\s\\S]*?(\\d+\\.\\d{2})\\s*元/升`, 'i'),
+        new RegExp(`${keyword}[\\s\\S]*?(\\d+\\.?\\d*)\\s*元`, 'i')
     ];
     for (let p of patterns) {
         const m = html.match(p);
@@ -88,7 +111,7 @@ function parseOilPrice(html, targetType) {
     }
     if (!price) return null;
     let change = null;
-    const cm = html.match(new RegExp(`${keyword}[\\s\\S]*?([↑↓↗↘])\\s*(\\d+\\.?\\d*)`,'i'));
+    const cm = html.match(new RegExp(`${keyword}[\\s\\S]*?([↑↓↗↘])\\s*(\\d+\\.?\\d*)`, 'i'));
     if (cm) {
         const sym = cm[1], val = cm[2];
         if (sym === '↑' || sym === '↗') change = '+' + val;
@@ -98,6 +121,7 @@ function parseOilPrice(html, targetType) {
     return { price, change };
 }
 
+// ============ 解析预测信息 ============
 function parsePrediction(html) {
     const result = { date:null, direction:null, amountPerTon:null, amountPerLiterMin:null, amountPerLiterMax:null, rawText:null };
     try {
@@ -130,6 +154,7 @@ function parsePrediction(html) {
     return result;
 }
 
+// ============ 格式化涨跌 ============
 function formatChange(change) {
     if (!change) return '';
     if (change.startsWith('+')) return `📈 涨 ${change.substring(1)} 元`;
@@ -137,4 +162,5 @@ function formatChange(change) {
     return `(${change})`;
 }
 
+// ============ 执行 ============
 main();
